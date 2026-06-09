@@ -1,23 +1,15 @@
 // MPEG audio frame parsing — hand-written, no decoding libraries.
-// Scope: MPEG Version 1 Audio Layer III (the tables also cover MPEG2/2.5 and Layers I/II).
+//
+// Scoped to MPEG Version 1, Layer III per the brief — the format of virtually all .mp3 files,
+// including the provided samples. Other MPEG versions and layers are intentionally out of scope:
+// such frames simply don't validate and are skipped. Supporting them would mean restoring the
+// per-version/layer bitrate and sample-rate tables and the layer-dependent frame-length formula.
 
-// Bitrate tables (kbps). Index 0 = "free", index 15 = invalid.
-// [MPEG version][layer][bitrateIndex]
-const BITRATES: Record<string, number[]> = {
-    "1-1": [0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448], // MPEG1 Layer I
-    "1-2": [0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384], // MPEG1 Layer II
-    "1-3": [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320], // MPEG1 Layer III
-    "2-1": [0, 32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256], // MPEG2/2.5 Layer I
-    "2-2": [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160], // MPEG2/2.5 Layer II/III
-    "2-3": [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160],
-};
+// MPEG1 Layer III bitrates (kbps), indexed by the 4-bit bitrate field. Index 0 = "free", 15 = invalid.
+const BITRATES = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320];
 
-// Sample rates (Hz) by MPEG version
-const SAMPLE_RATES: Record<number, number[]> = {
-    3: [44100, 48000, 32000], // MPEG1
-    2: [22050, 24000, 16000], // MPEG2
-    0: [11025, 12000, 8000], // MPEG2.5
-};
+// MPEG1 sample rates (Hz), indexed by the 2-bit sample-rate field (index 3 is reserved).
+const SAMPLE_RATES = [44100, 48000, 32000];
 
 function readByte(buf: Buffer, offset: number): number | null {
     if (offset < 0 || offset >= buf.length) {
@@ -57,53 +49,36 @@ export function frameLengthAt(buf: Buffer, offset: number): number | null {
 
     // Sync word: 11 set bits (0xFF followed by top 3 bits of next byte)
     if (b1 !== 0xff || (b2 & 0xe0) !== 0xe0) return null;
-
-    const versionBits = (b2 >> 3) & 0x03; // 3 = MPEG1, 2 = MPEG2, 0 = MPEG2.5, 1 = reserved
-    const layerBits = (b2 >> 1) & 0x03; // 3 = Layer I, 2 = Layer II, 1 = Layer III, 0 = reserved
-    if (versionBits === 1 || layerBits === 0) return null;
-
-    const layer = 4 - layerBits; // 1, 2, or 3
-    const versionKey = versionBits === 3 ? 1 : 2;
+    // Require MPEG Version 1 (bits 11) and Layer III (bits 01); other versions/layers are out of scope.
+    if (((b2 >> 3) & 0x03) !== 3 || ((b2 >> 1) & 0x03) !== 1) return null;
 
     const bitrateIndex = (b3 >> 4) & 0x0f;
     const sampleRateIndex = (b3 >> 2) & 0x03;
     const padding = (b3 >> 1) & 0x01;
 
-    if (bitrateIndex === 0 || bitrateIndex === 15) return null; // skip "free" and invalid
-    if (sampleRateIndex === 3) return null;
-
-    const bitrateTable = BITRATES[`${versionKey}-${layer}`];
-    const bitrateKbps = bitrateTable?.[bitrateIndex];
-    const sampleRateTable = SAMPLE_RATES[versionBits];
-    const sampleRate = sampleRateTable?.[sampleRateIndex];
-    if (bitrateKbps === undefined || sampleRate === undefined) {
-        return null;
+    const bitrateKbps = BITRATES[bitrateIndex];
+    const sampleRate = SAMPLE_RATES[sampleRateIndex];
+    if (!bitrateKbps || sampleRate === undefined) {
+        return null; // "free"/invalid bitrate, or reserved sample rate
     }
-    const bitrate = bitrateKbps * 1000;
 
-    if (layer === 1) {
-        return (Math.floor((12 * bitrate) / sampleRate) + padding) * 4;
-    }
-    // Layer II always uses 144. Layer III uses 144 for MPEG1, 72 for MPEG2/2.5.
-    const coefficient = layer === 2 || versionBits === 3 ? 144 : 72;
-    return Math.floor((coefficient * bitrate) / sampleRate) + padding;
+    // MPEG1 Layer III: frame length (bytes) = floor(144 * bitrate / sampleRate) + padding.
+    return Math.floor((144 * bitrateKbps * 1000) / sampleRate) + padding;
 }
 
 /**
  * True if the valid frame at `offset` is a Xing/Info metadata frame — the silent header frame
  * encoders prepend to carry VBR/duration info. It is a real MPEG frame but carries no audio, so
  * reference tools (e.g. mediainfo) and the encoder's own frame count exclude it.
- * The "Xing"/"Info" tag sits after the side-information block, whose size depends on version/channels.
+ * The "Xing"/"Info" tag sits after the side-information block (17 bytes mono, 32 bytes stereo for
+ * MPEG1 Layer III).
  */
 export function isInfoFrame(buf: Buffer, offset: number): boolean {
-    const b2 = readByte(buf, offset + 1);
     const b4 = readByte(buf, offset + 3);
-    if (b2 === null || b4 === null) return false;
+    if (b4 === null) return false;
 
-    const isMpeg1 = ((b2 >> 3) & 0x03) === 3;
     const isMono = ((b4 >> 6) & 0x03) === 3;
-    // Side-info size (bytes after the 4-byte header) by version + channel mode.
-    const sideInfo = isMpeg1 ? (isMono ? 17 : 32) : isMono ? 9 : 17;
+    const sideInfo = isMono ? 17 : 32;
     const tagOffset = offset + 4 + sideInfo;
 
     if (tagOffset + 4 > buf.length) return false;

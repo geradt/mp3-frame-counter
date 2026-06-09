@@ -34,16 +34,15 @@ Three source files, separated so the app is importable in tests:
 - **`src/app.ts`** — `createApp()` builds the Express app (with `multer` `memoryStorage()`, so the upload arrives as an in-memory `Buffer` at `req.file.buffer`) and is exported without listening, so tests can drive it via `supertest`. The `POST /file-upload` route hands the buffer to the parser.
 - **`src/mp3.ts`** — the hand-written parser (pure functions, no I/O) — the substance of the exercise:
     - `skipId3v2` — detects a leading `ID3` tag and skips it using the 28-bit synchsafe size in bytes 6–9, returning the offset where audio begins.
-    - `frameLengthAt` — validates an MPEG frame header at an offset (11-bit sync word, version/layer/bitrate/sample-rate bits) and computes the frame's byte length from the `BITRATES`/`SAMPLE_RATES` lookup tables. Returns `null` for anything invalid.
-    - `confirmedFrameLengthAt` — guards against _false sync_ (the byte pattern `0xFFE…` can occur inside audio data) with a **two-frame lookahead**: a header only counts if another valid header parses at the predicted next-frame position. The last frame in the stream has no successor, so a lone valid header at EOF is accepted.
-    - `isInfoFrame` — detects the `Xing`/`Info` metadata frame (located after the version/channel-dependent side-info block). This frame is excluded from the count so the result matches `mediainfo` and the encoder's own count.
-    - `countMp3Frames` — walks the buffer from the post-ID3 offset, advancing by the confirmed frame length on a hit and **resyncing one byte at a time** on a miss, counting confirmed frames but skipping the Info frame.
-
-    Frame-length math distinguishes Layer I (`(12·bitrate/sampleRate + pad)·4`) from Layers II/III (`coefficient·bitrate/sampleRate + pad`, where the coefficient is 144 except 72 for Layer III on MPEG2/2.5).
+    - `frameLengthAt` — validates an MPEG frame header at an offset (11-bit sync word; **must** be MPEG Version 1, Layer III) and computes the frame's byte length as `floor(144·bitrate/sampleRate) + padding` from the `BITRATES`/`SAMPLE_RATES` arrays. Returns `null` for anything else — other versions/layers are out of scope per the brief and simply don't validate.
+    - `scan` — the forward frame walk. Guards against _false sync_ (the byte pattern `0xFFE…` can occur inside audio data) with a **two-frame lookahead**: a header only counts if another valid header parses at the predicted next-frame position (a lone valid header at end-of-stream is accepted). On a miss it **resyncs one byte at a time**. Its `atEof` flag and `consumed` return let it run incrementally over chunks, so streaming yields the same count as scanning whole.
+    - `isInfoFrame` — detects the `Xing`/`Info` metadata frame (after the side-info block: 17 bytes mono, 32 stereo). Excluded from the count so the result matches `mediainfo` and the encoder's own count.
+    - `countMp3Frames` — convenience wrapper: skip ID3, then `scan` the whole buffer.
+    - `createStreamingFrameCounter` — incremental counter (`push`/`end`) holding only a small leftover window, so memory is independent of file size. Used by the HTTP layer.
 
 ## Tests
 
-Vitest, under `test/`. `helpers.ts` builds synthetic MPEG1 Layer III frames with known counts so assertions are deterministic. `mp3.test.ts` covers the parser, `app.test.ts` covers the HTTP endpoint via `supertest`, and `fixture.test.ts` runs against the real `test/fixtures/sample.mp3` (pinned to 6089 frames, verified with `mediainfo`).
+Vitest, under `test/`. `helpers.ts` builds synthetic MPEG1 Layer III frames with known counts so assertions are deterministic. `mp3.test.ts` covers the parser, `app.test.ts` covers the HTTP endpoint via `supertest` (including the 400/413/422 error paths), and `streaming.test.ts` checks the chunked counter against the whole-buffer count. `fixture.test.ts` and the real-fixture cases in `streaming.test.ts` run against the actual MP3s listed in `samples.ts` (VBR and CBR), each pinned to a count verified with `mediainfo`.
 
 ## TypeScript configuration constraints
 
