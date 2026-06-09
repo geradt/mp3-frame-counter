@@ -20,4 +20,12 @@ describe("POST /file-upload", () => {
         expect(res.status).toBe(400);
         expect(res.body).toHaveProperty("error");
     });
+
+    it("returns 413 when the file exceeds the size limit", async () => {
+        const tinyLimitApp = createApp({ maxFileSize: 100 }); // 100-byte cap
+        const res = await request(tinyLimitApp).post("/file-upload").attach("file", buildFrames(1), "sample.mp3");
+
+        expect(res.status).toBe(413);
+        expect(res.body).toHaveProperty("error");
+    });
 });

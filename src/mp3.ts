@@ -112,45 +112,100 @@ export function isInfoFrame(buf: Buffer, offset: number): boolean {
 }
 
 /**
- * Frame length at `offset` when it looks like a real header, not a false sync inside audio data.
- * Requires the next frame's header to parse at the predicted position (two-frame check).
- * The final frame in the stream has no successor, so a lone valid header at EOF is accepted.
+ * Forward scan over `buf`, counting confirmed audio frames. A frame is confirmed by a two-frame
+ * check: another valid header must parse at the predicted next-frame position (this rejects false
+ * syncs inside audio data). The Xing/Info metadata frame is not counted.
+ *
+ * `atEof` says whether `buf` ends the stream. At end-of-stream the final frame has no successor,
+ * so a lone valid header is accepted. Mid-stream the scan stops as soon as it lacks the bytes to
+ * decide and reports `consumed` (bytes it finished with) so a streaming caller can keep the
+ * remainder and resume once more arrives. The per-position decisions are identical either way, so
+ * streaming a file in chunks yields the same count as scanning it whole.
  */
-export function confirmedFrameLengthAt(buf: Buffer, offset: number): number | null {
-    const len = frameLengthAt(buf, offset);
-    if (!len || len <= 4) {
-        return null;
-    }
-
-    const nextOffset = offset + len;
-    if (nextOffset + 4 > buf.length) {
-        return len;
-    }
-
-    const nextLen = frameLengthAt(buf, nextOffset);
-    if (!nextLen || nextLen <= 4) {
-        return null;
-    }
-
-    return len;
-}
-
-/** Walk the buffer frame by frame and count valid frames. */
-export function countMp3Frames(buf: Buffer): number {
-    let offset = skipId3v2(buf);
+function scan(buf: Buffer, atEof: boolean): { frames: number; consumed: number } {
+    let pos = 0;
     let frames = 0;
 
-    while (offset < buf.length - 4) {
-        const len = confirmedFrameLengthAt(buf, offset);
-        if (len) {
-            // Count audio frames only; the Xing/Info metadata frame is excluded (matches mediainfo).
-            if (!isInfoFrame(buf, offset)) {
-                frames++;
-            }
-            offset += len;
-        } else {
-            offset++;
+    while (pos < buf.length - 4) {
+        const len = frameLengthAt(buf, pos);
+        if (len === null || len <= 4) {
+            pos++; // not a valid header here — resync one byte
+            continue;
         }
+
+        const nextOffset = pos + len;
+        if (nextOffset + 4 > buf.length) {
+            if (!atEof) break; // mid-stream: wait for more data before confirming
+            // End of stream: accept the final frame on its own valid header.
+            if (!isInfoFrame(buf, pos)) frames++;
+            pos += len;
+            continue;
+        }
+
+        const nextLen = frameLengthAt(buf, nextOffset);
+        if (nextLen === null || nextLen <= 4) {
+            pos++; // false sync inside audio data — resync
+            continue;
+        }
+
+        if (!isInfoFrame(buf, pos)) frames++;
+        pos += len;
     }
-    return frames;
+
+    return { frames, consumed: pos };
+}
+
+/** Count the audio frames in a complete in-memory MP3 buffer. */
+export function countMp3Frames(buf: Buffer): number {
+    const audio = buf.subarray(skipId3v2(buf));
+    return scan(audio, true).frames;
+}
+
+/**
+ * Incremental counter for streaming an MP3 without holding the whole file in memory: feed it
+ * chunks with `push()`, then call `end()` for the total. Memory stays bounded by a small leftover
+ * window (at most a partial frame straddling a chunk boundary), not the file size — so a 5 GB file
+ * costs the same as a 5 MB one.
+ */
+export function createStreamingFrameCounter() {
+    let leftover: Buffer = Buffer.alloc(0);
+    let frames = 0;
+    let id3Resolved = false;
+    let skipRemaining = 0;
+
+    /** Drop a leading ID3v2 tag, which may itself span several chunks. True once aligned to audio. */
+    function alignToAudio(atEof: boolean): boolean {
+        if (!id3Resolved) {
+            if (leftover.length < 10) {
+                if (!atEof) return false; // need 10 bytes to tell whether a tag is present
+                id3Resolved = true; // too short to hold a tag
+            } else {
+                skipRemaining = skipId3v2(leftover); // 0 when there is no tag
+                id3Resolved = true;
+            }
+        }
+        if (skipRemaining > 0) {
+            const drop = Math.min(skipRemaining, leftover.length);
+            leftover = leftover.subarray(drop);
+            skipRemaining -= drop;
+            if (skipRemaining > 0) return false; // tag continues into a later chunk
+        }
+        return true;
+    }
+
+    return {
+        push(chunk: Buffer): void {
+            leftover = leftover.length ? Buffer.concat([leftover, chunk]) : chunk;
+            if (!alignToAudio(false)) return;
+            const { frames: found, consumed } = scan(leftover, false);
+            frames += found;
+            if (consumed > 0) leftover = leftover.subarray(consumed);
+        },
+        end(): number {
+            if (!alignToAudio(true)) return frames;
+            frames += scan(leftover, true).frames;
+            leftover = Buffer.alloc(0);
+            return frames;
+        },
+    };
 }

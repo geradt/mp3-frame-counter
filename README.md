@@ -56,13 +56,17 @@ mediainfo --Output='Audio;%FrameCount%' /path/to/song.mp3
 
 ## How it works
 
-The upload is held in memory as a `Buffer` (via `multer`'s memory storage) and passed to a small hand-written parser in `src/mp3.ts`:
+The upload is **streamed** through a small hand-written parser in `src/mp3.ts` — the bytes are counted as they arrive rather than buffered whole, so memory stays flat regardless of file size:
 
 1. Skip a leading `ID3v2` metadata tag, if present, to find where the audio begins.
-2. Walk the buffer frame by frame. At each position, validate the 11-bit MPEG sync word plus the version/layer/bitrate/sample-rate header bits, and compute the frame's length from the MPEG bitrate and sample-rate tables.
+2. Walk the stream frame by frame. At each position, validate the 11-bit MPEG sync word plus the version/layer/bitrate/sample-rate header bits, and compute the frame's length from the MPEG bitrate and sample-rate tables.
 3. Guard against _false sync_ (the sync byte pattern can occur inside audio data) with a two-frame lookahead — a header only counts if another valid header is found at the predicted position of the next frame.
 4. Exclude the encoder's `Xing`/`Info` metadata frame, which carries VBR/duration info rather than audio (this is what reference tools like `mediainfo` do).
 5. Count the confirmed audio frames and return the total.
+
+### Scalability
+
+The upload is consumed as a stream (a custom `multer` storage engine feeds each chunk straight into the parser), so only a small window — at most one frame straddling a chunk boundary — is ever held in memory; a 5 GB file costs about the same as a 5 MB one. Uploads are also capped (`100 MB` by default) so a single oversized or malicious request is rejected early with `413` rather than tying up the server. At much larger scale you'd accept a direct upload to object storage and count frames in a background worker, but that is out of scope here.
 
 ## Available scripts
 
@@ -73,6 +77,8 @@ The upload is held in memory as a `Buffer` (via `multer`'s memory storage) and p
 | `npm test`           | Run the test suite once            |
 | `npm run test:watch` | Run the tests in watch mode        |
 | `npm run typecheck`  | Type-check without emitting output |
+| `npm run lint`       | Run ESLint                         |
+| `npm run format`     | Format the codebase with Prettier  |
 
 ## Tech stack
 

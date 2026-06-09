@@ -32,6 +32,15 @@ export function buildFramesWithInfo(count: number, tag: "Xing" | "Info" = "Info"
     return buf;
 }
 
+/** Split a buffer into fixed-size chunks, to simulate a streamed upload. */
+export function chunked(buf: Buffer, size: number): Buffer[] {
+    const chunks: Buffer[] = [];
+    for (let i = 0; i < buf.length; i += size) {
+        chunks.push(buf.subarray(i, i + size));
+    }
+    return chunks;
+}
+
 /** Build a minimal ID3v2 tag of `payloadSize` bytes (header is an extra 10 bytes). */
 export function buildId3v2(payloadSize: number): Buffer {
     const tag = Buffer.alloc(10 + payloadSize);
