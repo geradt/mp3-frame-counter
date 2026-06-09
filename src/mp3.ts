@@ -5,10 +5,10 @@
 // [MPEG version][layer][bitrateIndex]
 const BITRATES: Record<string, number[]> = {
     "1-1": [0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448], // MPEG1 Layer I
-    "1-2": [0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384],    // MPEG1 Layer II
-    "1-3": [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320],     // MPEG1 Layer III
-    "2-1": [0, 32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256],    // MPEG2/2.5 Layer I
-    "2-2": [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160],         // MPEG2/2.5 Layer II/III
+    "1-2": [0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384], // MPEG1 Layer II
+    "1-3": [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320], // MPEG1 Layer III
+    "2-1": [0, 32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256], // MPEG2/2.5 Layer I
+    "2-2": [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160], // MPEG2/2.5 Layer II/III
     "2-3": [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160],
 };
 
@@ -16,7 +16,7 @@ const BITRATES: Record<string, number[]> = {
 const SAMPLE_RATES: Record<number, number[]> = {
     3: [44100, 48000, 32000], // MPEG1
     2: [22050, 24000, 16000], // MPEG2
-    0: [11025, 12000, 8000],  // MPEG2.5
+    0: [11025, 12000, 8000], // MPEG2.5
 };
 
 function readByte(buf: Buffer, offset: number): number | null {
@@ -38,11 +38,7 @@ export function skipId3v2(buf: Buffer): number {
         }
 
         // Tag size is a 28-bit synchsafe integer in bytes 6-9
-        const size =
-            ((b6 & 0x7f) << 21) |
-            ((b7 & 0x7f) << 14) |
-            ((b8 & 0x7f) << 7) |
-            (b9 & 0x7f);
+        const size = ((b6 & 0x7f) << 21) | ((b7 & 0x7f) << 14) | ((b8 & 0x7f) << 7) | (b9 & 0x7f);
         return 10 + size;
     }
     return 0;
@@ -63,7 +59,7 @@ export function frameLengthAt(buf: Buffer, offset: number): number | null {
     if (b1 !== 0xff || (b2 & 0xe0) !== 0xe0) return null;
 
     const versionBits = (b2 >> 3) & 0x03; // 3 = MPEG1, 2 = MPEG2, 0 = MPEG2.5, 1 = reserved
-    const layerBits = (b2 >> 1) & 0x03;   // 3 = Layer I, 2 = Layer II, 1 = Layer III, 0 = reserved
+    const layerBits = (b2 >> 1) & 0x03; // 3 = Layer I, 2 = Layer II, 1 = Layer III, 0 = reserved
     if (versionBits === 1 || layerBits === 0) return null;
 
     const layer = 4 - layerBits; // 1, 2, or 3
@@ -107,7 +103,7 @@ export function isInfoFrame(buf: Buffer, offset: number): boolean {
     const isMpeg1 = ((b2 >> 3) & 0x03) === 3;
     const isMono = ((b4 >> 6) & 0x03) === 3;
     // Side-info size (bytes after the 4-byte header) by version + channel mode.
-    const sideInfo = isMpeg1 ? (isMono ? 17 : 32) : (isMono ? 9 : 17);
+    const sideInfo = isMpeg1 ? (isMono ? 17 : 32) : isMono ? 9 : 17;
     const tagOffset = offset + 4 + sideInfo;
 
     if (tagOffset + 4 > buf.length) return false;

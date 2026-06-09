@@ -1,39 +1,48 @@
 {
-  "name": "mp3-frame-counter",
-  "version": "1.0.0",
-  "description": "API that counts the audio frames in an uploaded MP3 file.",
-  "main": "src/index.ts",
-  "scripts": {
-    "start": "tsx src/index.ts",
-    "dev": "tsx watch src/index.ts",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/geradt/mp3-frame-counter.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "module",
-  "bugs": {
-    "url": "https://github.com/geradt/mp3-frame-counter/issues"
-  },
-  "homepage": "https://github.com/geradt/mp3-frame-counter#readme",
-  "dependencies": {
-    "express": "^5.2.1",
-    "multer": "^2.1.1"
-  },
-  "devDependencies": {
-    "@types/express": "^5.0.6",
-    "@types/multer": "^2.1.0",
-    "@types/node": "^25.9.2",
-    "@types/supertest": "^7.2.0",
-    "supertest": "^7.2.2",
-    "tsx": "^4.22.4",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.8"
-  }
+    "name": "mp3-frame-counter",
+    "version": "1.0.0",
+    "description": "API that counts the audio frames in an uploaded MP3 file.",
+    "main": "src/index.ts",
+    "scripts": {
+        "start": "tsx src/index.ts",
+        "dev": "tsx watch src/index.ts",
+        "typecheck": "tsc --noEmit",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "lint": "eslint .",
+        "lint:fix": "eslint . --fix",
+        "format": "prettier --write .",
+        "format:check": "prettier --check ."
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/geradt/mp3-frame-counter.git"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "type": "module",
+    "bugs": {
+        "url": "https://github.com/geradt/mp3-frame-counter/issues"
+    },
+    "homepage": "https://github.com/geradt/mp3-frame-counter#readme",
+    "dependencies": {
+        "express": "^5.2.1",
+        "multer": "^2.1.1"
+    },
+    "devDependencies": {
+        "@eslint/js": "^10.0.1",
+        "@types/express": "^5.0.6",
+        "@types/multer": "^2.1.0",
+        "@types/node": "^25.9.2",
+        "@types/supertest": "^7.2.0",
+        "eslint": "^10.4.1",
+        "eslint-config-prettier": "^10.1.8",
+        "prettier": "^3.8.4",
+        "supertest": "^7.2.2",
+        "tsx": "^4.22.4",
+        "typescript": "^6.0.3",
+        "typescript-eslint": "^8.61.0",
+        "vitest": "^4.1.8"
+    }
 }

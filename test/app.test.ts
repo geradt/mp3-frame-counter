@@ -7,9 +7,7 @@ const app = createApp();
 
 describe("POST /file-upload", () => {
     it("returns the frame count for an uploaded MP3", async () => {
-        const res = await request(app)
-            .post("/file-upload")
-            .attach("file", buildFrames(7), "sample.mp3");
+        const res = await request(app).post("/file-upload").attach("file", buildFrames(7), "sample.mp3");
 
         expect(res.status).toBe(200);
         expect(res.headers["content-type"]).toMatch(/application\/json/);

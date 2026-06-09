@@ -60,19 +60,19 @@ The upload is held in memory as a `Buffer` (via `multer`'s memory storage) and p
 
 1. Skip a leading `ID3v2` metadata tag, if present, to find where the audio begins.
 2. Walk the buffer frame by frame. At each position, validate the 11-bit MPEG sync word plus the version/layer/bitrate/sample-rate header bits, and compute the frame's length from the MPEG bitrate and sample-rate tables.
-3. Guard against *false sync* (the sync byte pattern can occur inside audio data) with a two-frame lookahead — a header only counts if another valid header is found at the predicted position of the next frame.
+3. Guard against _false sync_ (the sync byte pattern can occur inside audio data) with a two-frame lookahead — a header only counts if another valid header is found at the predicted position of the next frame.
 4. Exclude the encoder's `Xing`/`Info` metadata frame, which carries VBR/duration info rather than audio (this is what reference tools like `mediainfo` do).
 5. Count the confirmed audio frames and return the total.
 
 ## Available scripts
 
-| Script | Description |
-| --- | --- |
-| `npm start` | Run the server |
-| `npm run dev` | Run the server with auto-reload |
-| `npm test` | Run the test suite once |
-| `npm run test:watch` | Run the tests in watch mode |
-| `npm run typecheck` | Type-check without emitting output |
+| Script               | Description                        |
+| -------------------- | ---------------------------------- |
+| `npm start`          | Run the server                     |
+| `npm run dev`        | Run the server with auto-reload    |
+| `npm test`           | Run the test suite once            |
+| `npm run test:watch` | Run the tests in watch mode        |
+| `npm run typecheck`  | Type-check without emitting output |
 
 ## Tech stack
 

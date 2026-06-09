@@ -24,9 +24,7 @@ describe.skipIf(!existsSync(fixturePath))("sample.mp3 fixture", () => {
     });
 
     it("the endpoint returns the same count as the parser", async () => {
-        const res = await request(createApp())
-            .post("/file-upload")
-            .attach("file", buffer, "sample.mp3");
+        const res = await request(createApp()).post("/file-upload").attach("file", buffer, "sample.mp3");
 
         expect(res.status).toBe(200);
         expect(res.body).toEqual({ frameCount: countMp3Frames(buffer) });
