@@ -64,7 +64,7 @@ mediainfo --Output='Audio;%FrameCount%' /path/to/song.mp3
 The upload is **streamed** through a small hand-written parser in `src/mp3.ts` — the bytes are counted as they arrive rather than buffered whole, so memory stays flat regardless of file size:
 
 1. Skip a leading `ID3v2` metadata tag, if present, to find where the audio begins.
-2. Walk the stream frame by frame. At each position, validate the 11-bit MPEG sync word plus the version/layer/bitrate/sample-rate header bits, and compute the frame's length from the MPEG bitrate and sample-rate tables.
+2. Walk the stream frame by frame. At each position, validate the 11-bit MPEG sync word and require the header to be MPEG Version 1, Layer III (other versions/layers are out of scope and don't validate), then compute the frame's length from its bitrate and sample rate.
 3. Guard against _false sync_ (the sync byte pattern can occur inside audio data) with a two-frame lookahead — a header only counts if another valid header is found at the predicted position of the next frame.
 4. Exclude the encoder's `Xing`/`Info` metadata frame, which carries VBR/duration info rather than audio (this is what reference tools like `mediainfo` do).
 5. Count the confirmed audio frames and return the total.
