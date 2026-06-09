@@ -51,6 +51,21 @@ Successful response:
 
 Each error response is JSON of the form `{ "error": "<message>" }`.
 
+## Testing
+
+The repository includes sample MP3s under `test/fixtures/`. With the server running (`npm start`), count the frames in the provided sample — this command runs as-is from the project root:
+
+```bash
+curl -F file=@test/fixtures/sample.mp3 http://localhost:3000/file-upload
+# => {"frameCount":6089}
+```
+
+To run the automated unit and integration test suite (parser, endpoint, streaming, and the real sample files):
+
+```bash
+npm test
+```
+
 ## Verifying the result
 
 You can cross-check the frame count against a reference tool such as [`mediainfo`](https://mediaarea.net/en/MediaInfo):
