@@ -24,9 +24,30 @@ declare global {
 const frameCountStorage: StorageEngine = {
     _handleFile(_req, file, cb) {
         const counter = createStreamingFrameCounter();
-        file.stream.on("data", (chunk: Buffer) => counter.push(chunk));
-        file.stream.on("end", () => cb(null, { frameCount: counter.end() }));
-        file.stream.on("error", cb);
+        let done = false;
+        // Report success or failure exactly once. Parsing runs synchronously inside these stream
+        // listeners, so a thrown error must be caught here — otherwise it escapes as an
+        // uncaughtException and crashes the server instead of failing this one request.
+        const finish = (err: Error | null, info?: { frameCount: number }) => {
+            if (done) return;
+            done = true;
+            cb(err, info);
+        };
+        file.stream.on("data", (chunk: Buffer) => {
+            try {
+                counter.push(chunk);
+            } catch (err) {
+                finish(err as Error);
+            }
+        });
+        file.stream.on("end", () => {
+            try {
+                finish(null, { frameCount: counter.end() });
+            } catch (err) {
+                finish(err as Error);
+            }
+        });
+        file.stream.on("error", (err: Error) => finish(err));
     },
     _removeFile(_req, _file, cb) {
         cb(null); // nothing on disk to clean up
@@ -45,17 +66,35 @@ export function createApp(options: AppOptions = {}) {
 
     app.post("/file-upload", (req, res) => {
         upload.single("file")(req, res, (err: unknown) => {
-            if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
-                return res.status(413).json({ error: `File exceeds the ${maxFileSize}-byte limit.` });
+            // Multer errors are caused by the client's request (too large, wrong field, ...).
+            if (err instanceof multer.MulterError) {
+                if (err.code === "LIMIT_FILE_SIZE") {
+                    return res.status(413).json({ error: `File exceeds the ${maxFileSize}-byte limit.` });
+                }
+                if (err.code === "LIMIT_UNEXPECTED_FILE") {
+                    return res.status(400).json({ error: "Send a single file in the 'file' field." });
+                }
+                return res.status(400).json({ error: `Upload rejected (${err.code}).` });
             }
+            // Anything else is a server-side failure (e.g. the parser or stream errored).
             if (err) {
-                return res.status(400).json({ error: "Upload failed." });
+                return res.status(500).json({ error: "Failed to process the uploaded file." });
             }
             if (!req.file) {
                 return res.status(400).json({ error: "No file uploaded. Send an mp3 as the 'file' field." });
             }
+            // No valid MPEG frames means the upload isn't an MP3 (the field is client-supplied and
+            // unreliable, so we validate by content rather than by declared type/extension).
+            if (req.file.frameCount === 0) {
+                return res.status(422).json({ error: "No MP3 audio frames found; the file is not a valid MP3." });
+            }
             res.json({ frameCount: req.file.frameCount });
         });
+    });
+
+    // Safety net: turn any unhandled error into a JSON 500 rather than an HTML stack trace.
+    app.use((_err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+        res.status(500).json({ error: "Internal server error." });
     });
 
     return app;

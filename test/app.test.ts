@@ -28,4 +28,19 @@ describe("POST /file-upload", () => {
         expect(res.status).toBe(413);
         expect(res.body).toHaveProperty("error");
     });
+
+    it("returns 400 when the file is sent under the wrong field name", async () => {
+        const res = await request(app).post("/file-upload").attach("wrongfield", buildFrames(1), "sample.mp3");
+
+        expect(res.status).toBe(400);
+        expect(res.body).toHaveProperty("error");
+    });
+
+    it("returns 422 when the upload contains no MP3 frames", async () => {
+        const notAnMp3 = Buffer.from("this is plainly not an mp3 file");
+        const res = await request(app).post("/file-upload").attach("file", notAnMp3, "fake.mp3");
+
+        expect(res.status).toBe(422);
+        expect(res.body).toHaveProperty("error");
+    });
 });

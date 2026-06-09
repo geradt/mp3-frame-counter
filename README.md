@@ -40,11 +40,16 @@ Successful response:
 
 > The count excludes the encoder's `Xing`/`Info` metadata frame, so it matches what `mediainfo` reports for the same file.
 
-If no file is provided, the endpoint responds with `400`:
+### Errors
 
-```json
-{ "error": "No file uploaded. Send an mp3 as the 'file' field." }
-```
+| Status | When                                                       |
+| ------ | ---------------------------------------------------------- |
+| `400`  | No file in the request, or sent under the wrong field name |
+| `413`  | File exceeds the size limit (100 MB by default)            |
+| `422`  | The upload contains no MP3 audio frames (not a valid MP3)  |
+| `500`  | Unexpected failure while processing the file               |
+
+Each error response is JSON of the form `{ "error": "<message>" }`.
 
 ## Verifying the result
 
