@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { countMp3Frames, createStreamingFrameCounter } from "../src/mp3.js";
 import { buildFrames, buildFramesWithInfo, buildId3v2, chunked } from "./helpers.js";
+import { SAMPLES } from "./samples.js";
 
 /** Stream `data` through the incremental counter in `chunkSize` pieces. */
 function streamCount(data: Buffer, chunkSize: number): number {
@@ -44,14 +44,15 @@ describe("createStreamingFrameCounter", () => {
     });
 });
 
-const fixturePath = fileURLToPath(new URL("./fixtures/sample.mp3", import.meta.url));
-
-describe.skipIf(!existsSync(fixturePath))("streaming the real sample", () => {
-    it("counts the same as the whole-buffer parser", () => {
-        const data = readFileSync(fixturePath);
-        const expected = countMp3Frames(data);
-        for (const size of [1024, 9973, 65536]) {
-            expect(streamCount(data, size)).toBe(expected);
-        }
-    });
+describe("streaming real fixtures", () => {
+    for (const sample of SAMPLES) {
+        describe.skipIf(!existsSync(sample.path))(sample.name, () => {
+            it("streams to the mediainfo-verified count at any chunk size", () => {
+                const data = readFileSync(sample.path);
+                for (const size of [1024, 9973, 65536]) {
+                    expect(streamCount(data, size)).toBe(sample.expectedFrames);
+                }
+            });
+        });
+    }
 });
